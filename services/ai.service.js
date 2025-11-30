@@ -1,7 +1,6 @@
 // backend/services/ai.service.js
-import { GoogleGenerativeAI } from "@google/generative-ai"; 
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
-
 dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
@@ -9,105 +8,86 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 const model = genAI.getGenerativeModel({
   model: "gemini-2.0-flash",
   generationConfig: {
-        responseMimeType: "application/json",
-        temperature: 0.4,
-    },
-    systemInstruction: `You are an expert in MERN and Development. You have an experience of 10 years in the development. You always write code in modular and break the code in the possible way and follow best practices, You use understandable comments in the code, you create files as needed, you write code while maintaining the working of previous code. You always follow the best practices of the development You never miss the edge cases and always write code that is scalable and maintainable, In your code you always handle the errors and exceptions.
-    
-    Examples: 
+    responseMimeType: "application/json",
+    temperature: 0.4,
+  },
+  systemInstruction: `
+You are an expert MERN developer...
 
-    <example>
- 
-    response: {
-
-    "text": "this is you fileTree structure of the express server",
-    "fileTree": {
-        "app.js": {
-            file: {
-                contents: "
-                const express = require('express');
-
-                const app = express();
-
-
-                app.get('/', (req, res) => {
-                    res.send('Hello World!');
-                });
-
-
-                app.listen(3000, () => {
-                    console.log('Server is running on port 3000');
-                })
-                "
-            
-        },
-    },
-
-        "package.json": {
-            file: {
-                contents: "
-
-                {
-                    "name": "temp-server",
-                    "version": "1.0.0",
-                    "main": "index.js",
-                    "scripts": {
-                        "test": "echo \"Error: no test specified\" && exit 1"
-                    },
-                    "keywords": [],
-                    "author": "",
-                    "license": "ISC",
-                    "description": "",
-                    "dependencies": {
-                        "express": "^4.21.2"
-                    }
-}
-
-                
-                "
-                
-                
-
-            },
-
-        },
-
-    },
-    "buildCommand": {
-        mainItem: "npm",
-            commands: [ "install" ]
-    },
-
-    "startCommand": {
-        mainItem: "node",
-            commands: [ "app.js" ]
-    }
-}
-
-    user:Create an express application 
-   
-    </example>
-
-
-    
-       <example>
-
-       user:Hello 
-       response:{
-       "text":"Hello, How can I help you today?"
-       }
-       
-       </example>
-    
- IMPORTANT : don't use file name like routes/index.js
-       
-       
-    `
+IMPORTANT RULES:
+1. ALWAYS return **valid JSON**.
+2. NEVER return comments, markdown, code-blocks, backticks, or explanations.
+3. ALWAYS return a JSON containing at least:
+   {
+     "text": "...",
+     "fileTree": { ... }  // optional but SHOULD be present when user asks coding tasks
+   }
+4. fileTree must follow this format ONLY:
+   {
+     "filename.ext": {
+       "file": { "contents": "..." }
+     }
+   }
+5. text must be short, like a summary.
+6. If user asks normal questions, return:
+   { "text": "answer here" }
+7. If user asks coding / building / express app:
+   return:
+   {
+     "text": "Here is your app",
+     "fileTree": { ... },
+     "buildCommand": {...},
+     "startCommand": {...}
+   }
+`
 });
 
-export const generateResult = async (prompt) => {
+// ------------------------
+//  CLEAN JSON PARSER
+// ------------------------
+function safeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.log("❌ AI returned invalid JSON, wrapping into fallback", text);
 
+    return {
+      text: text,
+      fileTree: {}
+    };
+  }
+}
+
+// ------------------------
+//     MAIN FUNCTION
+// ------------------------
+export const generateResult = async (prompt) => {
+  try {
     const result = await model.generateContent(prompt);
 
-    return result.response.text()
-}
+    let raw = result.response.text().trim();
+
+    // Remove accidental ```json ... ```
+    if (raw.startsWith("```")) {
+      raw = raw.replace(/```json/gi, "").replace(/```/g, "").trim();
+    }
+
+    // Parse JSON safely
+    const finalResponse = safeJson(raw);
+
+    // Guarantee final format
+    return JSON.stringify({
+      text: finalResponse.text || "",
+      fileTree: finalResponse.fileTree || {},
+      buildCommand: finalResponse.buildCommand || null,
+      startCommand: finalResponse.startCommand || null
+    });
+
+  } catch (err) {
+    console.log("AI ERROR:", err);
+    return JSON.stringify({
+      text: "AI failed to generate a response.",
+      fileTree: {}
+    });
+  }
+};
