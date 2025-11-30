@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import projectModel from "./models/project.model.js";
 import { generateResult } from "./services/ai.service.js";
+import * as projectService from "./services/project.service.js";
 
 const port = process.env.PORT || 5000;
 
@@ -32,11 +33,11 @@ io.use(async (socket, next) => {
             return next(new Error("Invalid projectId"));
 
         socket.project = await projectModel.findById(projectId);
+        if (!socket.project) return next(new Error("Project not found"));
 
         if (!token) return next(new Error("Authentication error"));
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
         socket.user = decoded;
 
         next();
@@ -51,26 +52,59 @@ io.on("connection", (socket) => {
 
     console.log("a user connected");
 
-    // ⭐ FIXED SOCKET HANDLER — NO DATABASE SAVE HERE
     socket.on("project-message", async (data) => {
-        // Just broadcast — DO NOT SAVE AGAIN
-        socket.broadcast.to(socket.roomId).emit("project-message", data);
+        const { sender, message } = data;
 
-        // AI message handling
-        const { message } = data;
+        // SAVE USER MESSAGE
+        const updated = await projectService.saveMessage({
+            projectId: socket.project._id,
+            sender,
+            message
+        });
+
+        const savedMessage = updated.messages[updated.messages.length - 1];
+
+        // BROADCAST USER MESSAGE
+        socket.broadcast.to(socket.roomId).emit("project-message", savedMessage);
+
+        // PROCESS AI MESSAGE
         const isAi = message.includes("@ai");
-
         if (isAi) {
             const prompt = message.replace("@ai", "");
 
-            const aiResponse = await generateResult(prompt);
+            const aiResponseRaw = await generateResult(prompt);
 
-            // Emit AI message (API will save this separately)
-            io.to(socket.roomId).emit("project-message", {
+            let parsed;
+            try {
+                parsed = JSON.parse(aiResponseRaw);
+            } catch {
+                parsed = { text: aiResponseRaw, fileTree: null };
+            }
+
+            const aiMessage = {
                 sender: { _id: "ai", email: "AI" },
-                message: aiResponse,
-                createdAt: new Date()
+                message: JSON.stringify({ text: parsed.text }),
+                createdAt: new Date(),
+                fileTree: parsed.fileTree || null
+            };
+
+            // SAVE AI MESSAGE
+            await projectService.saveMessage({
+                projectId: socket.project._id,
+                sender: { _id: "ai", email: "AI" },
+                message: JSON.stringify({ text: parsed.text })
             });
+
+            // SAVE UPDATED FILE TREE (SUPER IMPORTANT)
+            if (parsed.fileTree) {
+                await projectService.updateFileTree({
+                    projectId: socket.project._id,
+                    fileTree: parsed.fileTree
+                });
+            }
+
+            // EMIT TO ALL (INCLUDING SENDER)
+            io.to(socket.roomId).emit("project-message", aiMessage);
         }
     });
 
@@ -81,5 +115,6 @@ io.on("connection", (socket) => {
 });
 
 server.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+    console.log(`Server running on port ${port}`);
 });
+ 
