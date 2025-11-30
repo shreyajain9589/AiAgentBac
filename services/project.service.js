@@ -48,6 +48,15 @@ export const saveMessage = async ({ projectId, sender, message }) => {
     return updatedProject;
 };
 
+export const removeUser = async ({ projectId, userId }) => {
+    return await projectModel.findByIdAndUpdate(
+        projectId,
+        { $pull: { users: userId } },
+        { new: true }
+    ).populate("users");
+};
+
+
 // Get all messages from a project
 export const getMessages = async ({ projectId }) => {
     if (!projectId) throw new Error("projectId is required");

@@ -13,6 +13,12 @@ router.post(
   projectController.createProject
 );
 
+router.put("/remove-user",
+  authMiddleWare.authUser,
+  projectController.removeUser
+);
+
+
 // Get all projects of logged in user
 router.get(
   "/all",
