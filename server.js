@@ -7,7 +7,6 @@ import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import projectModel from "./models/project.model.js";
 import { generateResult } from "./services/ai.service.js";
-import * as projectService from "./services/project.service.js";
 
 const port = process.env.PORT || 5000;
 
@@ -20,6 +19,7 @@ const io = new Server(server, {
     }
 });
 
+// AUTH MIDDLEWARE
 io.use(async (socket, next) => {
     try {
         const token =
@@ -51,21 +51,13 @@ io.on("connection", (socket) => {
 
     console.log("a user connected");
 
+    // ⭐ FIXED SOCKET HANDLER — NO DATABASE SAVE HERE
     socket.on("project-message", async (data) => {
-        const { sender, message } = data;
+        // Just broadcast — DO NOT SAVE AGAIN
+        socket.broadcast.to(socket.roomId).emit("project-message", data);
 
-        // Save user message
-        const updated = await projectService.saveMessage({
-            projectId: socket.project._id,
-            sender,
-            message
-        });
-
-        const savedMessage = updated.messages[updated.messages.length - 1];
-
-        // send to others
-        socket.broadcast.to(socket.roomId).emit("project-message", savedMessage);
-
+        // AI message handling
+        const { message } = data;
         const isAi = message.includes("@ai");
 
         if (isAi) {
@@ -73,12 +65,7 @@ io.on("connection", (socket) => {
 
             const aiResponse = await generateResult(prompt);
 
-            await projectService.saveMessage({
-                projectId: socket.project._id,
-                sender: { _id: "ai", email: "AI" },
-                message: aiResponse
-            });
-
+            // Emit AI message (API will save this separately)
             io.to(socket.roomId).emit("project-message", {
                 sender: { _id: "ai", email: "AI" },
                 message: aiResponse,
