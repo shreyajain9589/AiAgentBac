@@ -60,7 +60,7 @@ router.post(
   authMiddleWare.authUser,
   body('projectId').isString().withMessage('projectId is required'),
   body('message').isString().withMessage('message is required'),
-  projectController.saveMessage
+  projectController.saveMessageController
 );
 
 // Get all messages for a project
