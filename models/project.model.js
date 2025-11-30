@@ -1,5 +1,19 @@
 import mongoose from 'mongoose';
 
+const messageSchema = new mongoose.Schema({
+    sender: {
+        type: mongoose.Schema.Types.Mixed, // contains id + email
+        required: true
+    },
+    message: {
+        type: String,
+        required: true
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    }
+});
 
 const projectSchema = new mongoose.Schema({
     name: {
@@ -7,7 +21,7 @@ const projectSchema = new mongoose.Schema({
         lowercase: true,
         required: true,
         trim: true,
-        unique: [ true, 'Project name must be unique' ],
+        unique: true
     },
 
     users: [
@@ -16,15 +30,18 @@ const projectSchema = new mongoose.Schema({
             ref: 'user'
         }
     ],
+
+    messages: {
+        type: [messageSchema],
+        default: []
+    },
+
     fileTree: {
         type: Object,
         default: {}
-    },
+    }
+});
 
-})
-
-
-const Project = mongoose.model('project', projectSchema)
-
+const Project = mongoose.model('project', projectSchema);
 
 export default Project;
