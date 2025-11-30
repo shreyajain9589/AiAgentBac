@@ -1,140 +1,141 @@
-// controllers/project.controller.js
-import * as projectService from '../services/project.service.js';
-import userModel from '../models/user.model.js';
-import { validationResult } from 'express-validator';
+// services/project.service.js
+import projectModel from "../models/project.model.js";
+import mongoose from "mongoose";
 
-export const createProject = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+// Create a project
+export const createProject = async ({ name, userId }) => {
+    if (!name) throw new Error("Name is required");
+    if (!userId) throw new Error("UserId is required");
 
-    try {
-        const { name } = req.body;
-        const loggedInUser = await userModel.findOne({ email: req.user.email });
+    const project = await projectModel.create({
+        name,
+        users: [userId],
+        messages: [],
+        fileTree: {}
+    });
 
-        const project = await projectService.createProject({
-            name,
-            userId: loggedInUser._id
-        });
-
-        res.status(201).json(project);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+    return project;
 };
 
-export const removeUser = async (req, res) => {
-    try {
-        const { projectId, userId } = req.body;
-
-        const updated = await projectService.removeUser({ projectId, userId });
-        res.json({ project: updated });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+// Save message inside a project
+export const saveMessage = async ({ projectId, sender, message }) => {
+    if (!projectId || !sender || !message) {
+        throw new Error("projectId, sender and message are required");
     }
+
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        throw new Error("Invalid projectId");
+    }
+
+    const updatedProject = await projectModel.findByIdAndUpdate(
+        projectId,
+        {
+            $push: {
+                messages: {
+                    sender,
+                    message,
+                    createdAt: new Date()
+                }
+            }
+        },
+        { new: true }
+    );
+
+    if (!updatedProject) {
+        throw new Error("Project not found");
+    }
+
+    return updatedProject;
+};
+
+export const removeUser = async ({ projectId, userId }) => {
+    return await projectModel.findByIdAndUpdate(
+        projectId,
+        { $pull: { users: userId } },
+        { new: true }
+    ).populate("users");
 };
 
 
-export const getAllProject = async (req, res) => {
-    try {
-        const loggedInUser = await userModel.findOne({ email: req.user.email });
+// Get all messages from a project
+export const getMessages = async ({ projectId }) => {
+    if (!projectId) throw new Error("projectId is required");
 
-        const projects = await projectService.getAllProjectByUserId({
-            userId: loggedInUser._id
-        });
-
-        res.status(200).json({ projects });
-
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        throw new Error("Invalid projectId");
     }
+
+    const project = await projectModel.findById(projectId);
+
+    return project?.messages || [];
 };
 
-export const addUserToProject = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+// Get all projects for a logged-in user
+export const getAllProjectByUserId = async ({ userId }) => {
+    if (!userId) throw new Error("UserId is required");
 
-    try {
-        const { projectId, users } = req.body;
-        const loggedInUser = await userModel.findOne({ email: req.user.email });
-
-        const project = await projectService.addUsersToProject({
-            projectId,
-            users,
-            userId: loggedInUser._id
-        });
-
-        res.status(200).json({ project });
-
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+    const projects = await projectModel.find({ users: userId });
+    return projects;
 };
 
-export const getProjectById = async (req, res) => {
-    try {
-        const { projectId } = req.params;
-        const project = await projectService.getProjectById({ projectId });
+// Add collaborators to the project
+export const addUsersToProject = async ({ projectId, users, userId }) => {
+    if (!projectId || !users) throw new Error("projectId and users are required");
 
-        res.status(200).json({ project });
-
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        throw new Error("Invalid projectId");
     }
+
+    // Validate user IDs
+    for (const u of users) {
+        if (!mongoose.Types.ObjectId.isValid(u)) {
+            throw new Error("Invalid userId inside users array");
+        }
+    }
+
+    // Only existing collaborators can add new collaborators
+    const project = await projectModel.findOne({
+        _id: projectId,
+        users: userId
+    });
+
+    if (!project) {
+        throw new Error("You are not authorized to add users to this project");
+    }
+
+    const updated = await projectModel.findByIdAndUpdate(
+        projectId,
+        { $addToSet: { users: { $each: users } } },
+        { new: true }
+    );
+
+    return updated;
 };
 
-// ⭐ GET all messages
-export const getMessages = async (req, res) => {
-    try {
-        const { projectId } = req.params;
-
-        const messages = await projectService.getMessages({ projectId });
-
-        res.status(200).json({ messages });
-
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+// Get a single project
+export const getProjectById = async ({ projectId }) => {
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        throw new Error("Invalid projectId");
     }
+
+    const project = await projectModel
+        .findById(projectId)
+        .populate("users");
+
+    return project;
 };
 
-// ⭐ SAVE message
-export const saveMessageController = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
-    try {
-        const { projectId, sender, message } = req.body;
-
-        const updatedProject = await projectService.saveMessage({
-            projectId,
-            sender,
-            message
-        });
-
-        const savedMessage =
-            updatedProject.messages[updatedProject.messages.length - 1];
-
-        res.status(201).json({ message: savedMessage });
-
-    } catch (err) {
-        res.status(400).json({ error: err.message });
+// Update file tree saved inside project
+export const updateFileTree = async ({ projectId, fileTree }) => {
+    if (!mongoose.Types.ObjectId.isValid(projectId)) {
+        throw new Error("Invalid projectId");
     }
-};
 
-export const updateFileTree = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const updated = await projectModel.findByIdAndUpdate(
+        projectId,
+        { fileTree },
+        { new: true }
+    );
 
-    try {
-        const { projectId, fileTree } = req.body;
-
-        const project = await projectService.updateFileTree({
-            projectId,
-            fileTree
-        });
-
-        res.status(200).json({ project });
-
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
+    return updated;
 };

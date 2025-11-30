@@ -2,140 +2,83 @@
 import projectModel from "../models/project.model.js";
 import mongoose from "mongoose";
 
-// Create a project
+/* CREATE PROJECT */
 export const createProject = async ({ name, userId }) => {
-    if (!name) throw new Error("Name is required");
-    if (!userId) throw new Error("UserId is required");
-
-    const project = await projectModel.create({
-        name,
-        users: [userId],
-        messages: [],
-        fileTree: {}
-    });
-
-    return project;
+  return await projectModel.create({
+    name,
+    users: [userId],
+    messages: [],
+    fileTree: {},
+  });
 };
 
-// Save message inside a project
+/* SAVE MESSAGE */
 export const saveMessage = async ({ projectId, sender, message }) => {
-    if (!projectId || !sender || !message) {
-        throw new Error("projectId, sender and message are required");
-    }
+  if (!mongoose.Types.ObjectId.isValid(projectId))
+    throw new Error("Invalid projectId");
 
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        throw new Error("Invalid projectId");
-    }
-
-    const updatedProject = await projectModel.findByIdAndUpdate(
-        projectId,
-        {
-            $push: {
-                messages: {
-                    sender,
-                    message,
-                    createdAt: new Date()
-                }
-            }
+  const updated = await projectModel.findByIdAndUpdate(
+    projectId,
+    {
+      $push: {
+        messages: {
+          sender,
+          message,
+          createdAt: new Date(),
         },
-        { new: true }
-    );
+      },
+    },
+    { new: true }
+  );
 
-    if (!updatedProject) {
-        throw new Error("Project not found");
-    }
-
-    return updatedProject;
+  if (!updated) throw new Error("Project not found");
+  return updated;
 };
 
-export const removeUser = async ({ projectId, userId }) => {
-    return await projectModel.findByIdAndUpdate(
-        projectId,
-        { $pull: { users: userId } },
-        { new: true }
-    ).populate("users");
-};
-
-
-// Get all messages from a project
+/* GET MESSAGES */
 export const getMessages = async ({ projectId }) => {
-    if (!projectId) throw new Error("projectId is required");
+  if (!mongoose.Types.ObjectId.isValid(projectId))
+    throw new Error("Invalid projectId");
 
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        throw new Error("Invalid projectId");
-    }
-
-    const project = await projectModel.findById(projectId);
-
-    return project?.messages || [];
+  const project = await projectModel.findById(projectId);
+  return project?.messages || [];
 };
 
-// Get all projects for a logged-in user
+/* GET ALL PROJECTS */
 export const getAllProjectByUserId = async ({ userId }) => {
-    if (!userId) throw new Error("UserId is required");
-
-    const projects = await projectModel.find({ users: userId });
-    return projects;
+  return await projectModel.find({ users: userId });
 };
 
-// Add collaborators to the project
-export const addUsersToProject = async ({ projectId, users, userId }) => {
-    if (!projectId || !users) throw new Error("projectId and users are required");
-
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        throw new Error("Invalid projectId");
-    }
-
-    // Validate user IDs
-    for (const u of users) {
-        if (!mongoose.Types.ObjectId.isValid(u)) {
-            throw new Error("Invalid userId inside users array");
-        }
-    }
-
-    // Only existing collaborators can add new collaborators
-    const project = await projectModel.findOne({
-        _id: projectId,
-        users: userId
-    });
-
-    if (!project) {
-        throw new Error("You are not authorized to add users to this project");
-    }
-
-    const updated = await projectModel.findByIdAndUpdate(
-        projectId,
-        { $addToSet: { users: { $each: users } } },
-        { new: true }
-    );
-
-    return updated;
+/* ADD USERS */
+export const addUsersToProject = async ({ projectId, users }) => {
+  return await projectModel.findByIdAndUpdate(
+    projectId,
+    { $addToSet: { users: { $each: users } } },
+    { new: true }
+  );
 };
 
-// Get a single project
+/* REMOVE USER */
+export const removeUser = async ({ projectId, userId }) => {
+  return await projectModel
+    .findByIdAndUpdate(
+      projectId,
+      { $pull: { users: userId } },
+      { new: true }
+    )
+    .populate("users");
+};
+
+/* GET PROJECT BY ID */
 export const getProjectById = async ({ projectId }) => {
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        throw new Error("Invalid projectId");
-    }
-
-    const project = await projectModel
-        .findById(projectId)
-        .populate("users");
-
-    return project;
+  return await projectModel.findById(projectId).populate("users");
 };
 
-// Update file tree saved inside project
+/* UPDATE FILE TREE */
 export const updateFileTree = async ({ projectId, fileTree }) => {
-    if (!mongoose.Types.ObjectId.isValid(projectId)) {
-        throw new Error("Invalid projectId");
-    }
-
-    const updated = await projectModel.findByIdAndUpdate(
-        projectId,
-        { fileTree },
-        { new: true }
-    );
-
-    return updated;
+  return await projectModel.findByIdAndUpdate(
+    projectId,
+    { fileTree },
+    { new: true }
+  );
 };
