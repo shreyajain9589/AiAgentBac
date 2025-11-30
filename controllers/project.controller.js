@@ -70,7 +70,7 @@ export const getProjectById = async (req, res) => {
     }
 };
 
-// ⭐ NEW ROUTE: GET ALL MESSAGES
+// ⭐ GET all messages
 export const getMessages = async (req, res) => {
     try {
         const { projectId } = req.params;
@@ -84,8 +84,11 @@ export const getMessages = async (req, res) => {
     }
 };
 
-// ⭐ NEW ROUTE: SAVE MESSAGE (Frontend POST)
+// ⭐ SAVE message
 export const saveMessageController = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
     try {
         const { projectId, sender, message } = req.body;
 
@@ -95,7 +98,8 @@ export const saveMessageController = async (req, res) => {
             message
         });
 
-        const savedMessage = updatedProject.messages[updatedProject.messages.length - 1];
+        const savedMessage =
+            updatedProject.messages[updatedProject.messages.length - 1];
 
         res.status(201).json({ message: savedMessage });
 

@@ -1,73 +1,124 @@
-// backend/routes/project.routes.js
-import { Router } from 'express';
-import { body } from 'express-validator';
-import * as projectController from '../controllers/project.controller.js';
-import * as authMiddleWare from '../middleware/auth.middleware.js';
+// controllers/project.controller.js
+import * as projectService from '../services/project.service.js';
+import userModel from '../models/user.model.js';
+import { validationResult } from 'express-validator';
 
-const router = Router();
+export const createProject = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-// Create project
-router.post(
-  '/create',
-  authMiddleWare.authUser,
-  body('name').isString().withMessage('Name is required'),
-  projectController.createProject
-);
+    try {
+        const { name } = req.body;
+        const loggedInUser = await userModel.findOne({ email: req.user.email });
 
-// Get all projects of a user
-router.get(
-  '/all',
-  authMiddleWare.authUser,
-  projectController.getAllProject
-);
+        const project = await projectService.createProject({
+            name,
+            userId: loggedInUser._id
+        });
 
-// Add users to project
-router.put(
-  '/add-user',
-  authMiddleWare.authUser,
-  body('projectId').isString().withMessage('Project ID is required'),
-  body('users')
-    .isArray({ min: 1 })
-    .withMessage('Users must be an array of strings')
-    .custom((users) => users.every((u) => typeof u === 'string'))
-    .withMessage('Each user must be a string'),
-  projectController.addUserToProject
-);
+        res.status(201).json(project);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
 
-// Get single project
-router.get(
-  '/get-project/:projectId',
-  authMiddleWare.authUser,
-  projectController.getProjectById
-);
+export const getAllProject = async (req, res) => {
+    try {
+        const loggedInUser = await userModel.findOne({ email: req.user.email });
 
-// Update file tree
-router.put(
-  '/update-file-tree',
-  authMiddleWare.authUser,
-  body('projectId').isString().withMessage('Project ID is required'),
-  body('fileTree').isObject().withMessage('File tree is required'),
-  projectController.updateFileTree
-);
+        const projects = await projectService.getAllProjectByUserId({
+            userId: loggedInUser._id
+        });
 
-/* ---------------------------------------------------------
-   ⭐ NEW ROUTES FOR CHAT (MESSAGE STORAGE)
-----------------------------------------------------------*/
+        res.status(200).json({ projects });
 
-// Save a message to a project
-router.post(
-  '/message',
-  authMiddleWare.authUser,
-  body('projectId').isString().withMessage('projectId is required'),
-  body('message').isString().withMessage('message is required'),
-  projectController.saveMessageController
-);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
 
-// Get all messages for a project
-router.get(
-  '/messages/:projectId',
-  authMiddleWare.authUser,
-  projectController.getMessages
-);
+export const addUserToProject = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-export default router;
+    try {
+        const { projectId, users } = req.body;
+        const loggedInUser = await userModel.findOne({ email: req.user.email });
+
+        const project = await projectService.addUsersToProject({
+            projectId,
+            users,
+            userId: loggedInUser._id
+        });
+
+        res.status(200).json({ project });
+
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
+export const getProjectById = async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        const project = await projectService.getProjectById({ projectId });
+
+        res.status(200).json({ project });
+
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
+// ⭐ NEW ROUTE: GET ALL MESSAGES
+export const getMessages = async (req, res) => {
+    try {
+        const { projectId } = req.params;
+
+        const messages = await projectService.getMessages({ projectId });
+
+        res.status(200).json({ messages });
+
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
+// ⭐ NEW ROUTE: SAVE MESSAGE (Frontend POST)
+export const saveMessageController = async (req, res) => {
+    try {
+        const { projectId, sender, message } = req.body;
+
+        const updatedProject = await projectService.saveMessage({
+            projectId,
+            sender,
+            message
+        });
+
+        const savedMessage = updatedProject.messages[updatedProject.messages.length - 1];
+
+        res.status(201).json({ message: savedMessage });
+
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
+
+export const updateFileTree = async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    try {
+        const { projectId, fileTree } = req.body;
+
+        const project = await projectService.updateFileTree({
+            projectId,
+            fileTree
+        });
+
+        res.status(200).json({ project });
+
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+};
