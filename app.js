@@ -12,8 +12,13 @@ connect();
 const app = express();
 
 app.use(cors({
-  origin: "http://localhost:5173",
-  credentials: true
+  origin: [
+    "http://localhost:5173",
+    "https://ai-agent-fr.vercel.app",
+    "https://aiagentfr.vercel.app",
+    "https://ai-agentfr.vercel.app"
+  ],
+  credentials: true,
 }));
 
 app.use(morgan('dev'));
